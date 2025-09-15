@@ -16,6 +16,7 @@ import com.iutmetz.edt.databinding.LayoutCoursBinding
 import com.iutmetz.edt.databinding.LayoutEdtSemaineBinding
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import java.util.Calendar
 
 class AffichageSemaine( // cette classe permet d'afficher les cours de l'emploi du temps par semaine
     inflater: LayoutInflater,
@@ -63,35 +64,49 @@ class AffichageSemaine( // cette classe permet d'afficher les cours de l'emploi 
         }
     }
 
-    override fun afficherCours(cours: CoursEntity, abbreviations: List<AbbreviationEntity>) { // cette fonction permet de définir comment afficher un cours
-        val jour = cours.debut.day // on récupère le jour de la semaine du cours
-        if (jour != 0) { // si le jour n'est pas de 0 (dimanche)
-            val heureDebut = cours.debut.hours * 2 + if (cours.debut.minutes >= 15) 1 else 0 // on calcule l'heure de début et de fin en comptant une heure comme 2 et si il y a encore plus de 15 minutes, on ajoute 1
-            val heureFin = cours.fin.hours * 2 + if (cours.fin.minutes >= 15) 1 else 0
-            val rowSpan = heureFin - heureDebut // on calcule le nombre de lignes nécessaires pour afficher le cours
-            val row = heureDebut - ((this.heureDebut + (cours.debut.timezoneOffset / 60)) * 2) + 1 // on calcule la ligne de début du cours de façon à bien aligner les cours sur la bonne heure de début
-            val param = LayoutParams().apply { // on définit les paramètres de la vue
-                rowSpec = GridLayout.spec(row, rowSpan) // on définit la ligne et la colonne de la vue
-                columnSpec = GridLayout.spec(jour, 1)
-                width = (columnWidth.toFloat() * density).toInt() // on définit la largeur et la hauteur de la vue
+    override fun afficherCours(cours: CoursEntity, abbreviations: List<AbbreviationEntity>) {
+        // Vérifie que la date de début est valide
+        val debutCalendar = Calendar.getInstance().apply { time = cours.debut }
+        val finCalendar = Calendar.getInstance().apply { time = cours.fin }
+
+        val jour = debutCalendar.get(Calendar.DAY_OF_WEEK) // 1 = dimanche, 2 = lundi, ...
+        if (jour != Calendar.SUNDAY) { // si ce n'est pas dimanche
+            // Calcul des "slots" pour GridLayout : 1 slot = 30 min
+            val heureDebut = debutCalendar.get(Calendar.HOUR_OF_DAY) * 2 +
+                    (if (debutCalendar.get(Calendar.MINUTE) >= 15) 1 else 0)
+            val heureFin = finCalendar.get(Calendar.HOUR_OF_DAY) * 2 +
+                    (if (finCalendar.get(Calendar.MINUTE) >= 15) 1 else 0)
+            val rowSpan = heureFin - heureDebut
+
+            // Ajustement par rapport à l'heure de début de la grille
+            val row = (heureDebut - (this.heureDebut * 2)).coerceAtLeast(0)
+
+            val param = GridLayout.LayoutParams().apply {
+                rowSpec = GridLayout.spec(row, rowSpan)
+                columnSpec = GridLayout.spec(jour - 1, 1) // GridLayout 0-index
+                width = (columnWidth.toFloat() * density).toInt()
                 height = (rowHeight.toFloat() * density * rowSpan).toInt()
             }
-            val titre = abbreviations.find { it.mod_lib == cours.titre }?.mod_code ?: cours.titre // on récupère le titre du cours en utilisant les abbréviations si possible
-            lifecycleScope.launch(Dispatchers.Main) { // on lance une coroutine sur le thread principal pour afficher le cours
-                val coursBinding = LayoutCoursBinding.inflate( // on crée un binding pour afficher le cours
+
+
+            val titre = abbreviations.find { it.mod_lib == cours.titre }?.mod_code ?: cours.titre
+
+            lifecycleScope.launch(Dispatchers.Main) {
+                val coursBinding = LayoutCoursBinding.inflate(
                     LayoutInflater.from(binding.root.context),
                     binding.grid,
                     false
                 ).apply {
-                    tvSalle.text = cours.salle // on définit le texte de la salle de la vue
-                    tvTitre.text = titre // on définit le texte du titre de la vue
-                    root.layoutParams = param // on applique les paramètres à la vue
+                    tvSalle.text = cours.salle
+                    tvTitre.text = titre
+                    root.layoutParams = param
                 }
 
-                binding.grid.addView(coursBinding.root) // on ajoute la vue au tableau
+                binding.grid.addView(coursBinding.root)
             }
         }
     }
+
 
     override fun effacer() { // cette fonction permet d'effacer les cours
         val casesAEnlever = mutableListOf<ConstraintLayout>() // on crée une liste de ConstraintLayout (comme un div en HTML) qui seront effacées qui correspondent au cases de cours

@@ -120,17 +120,21 @@ class EdtFragment : BaseFragment() { // ce fragment permet d'afficher l'emploi d
         }
 
         showProgressIndicator(true) // on affiche un indicateur de chargement
-        lifecycleScope.launch(Dispatchers.IO) { // on lance une coroutine qui est un thread séparé du thread principal pour charger les données de l'emploi du temps,
-            // à noter que dans kotlin les fonctions asynchrone sont des fonctions suspend, elles bloquent complètement le thread courant et doivent donc être lancées dans une coroutine
-            val session = viewModel.chargeSession() // on charge la session de l'utilisateur
+        lifecycleScope.launch(Dispatchers.IO) {
+            val session = viewModel.chargeSession()
 
             if (session == null) {
-                viewModel.promo = promoOptions[binding.spinnerPromo.selectedItemPosition].code // le code de promo est mis par défaut au premier élément du spinner si la session n'existe pas
+                viewModel.promo = promoOptions[binding.spinnerPromo.selectedItemPosition].code
             }
-        }.invokeOnCompletion { // on attend que la coroutine soit terminée pour exécuter le code suivant
-            binding.spinnerPromo.setSelection(promoOptions.indexOfFirst { it.code == viewModel.promo }) // on sélectionne la promo spécifiée dans le ViewModel dans le spinner pour le cas où la session est récupérée
-            refreshPage() // la page est rafraîchie
+        }.invokeOnCompletion {
+            lifecycleScope.launch(Dispatchers.Main) {
+                binding.spinnerPromo.setSelection(
+                    promoOptions.indexOfFirst { it.code == viewModel.promo }
+                )
+                refreshPage()
+            }
         }
+
     }
 
     override fun onDestroyView() { // cette fonction est appelée lorsque la vue est détruite
